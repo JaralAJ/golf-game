@@ -1637,6 +1637,24 @@
     }
     const fmtDiff = (d) => (d === 0 ? "E" : d > 0 ? "+" + d : String(d));
 
+    // Lowest strokes ever taken on each hole, saved between sessions.
+    function loadHoleBests() {
+      try {
+        const a = JSON.parse(localStorage.getItem("tp-hole-best"));
+        if (Array.isArray(a)) return a;
+      } catch (e) {}
+      return [];
+    }
+    const holeBests = loadHoleBests();
+    function saveHoleBests() {
+      try {
+        localStorage.setItem("tp-hole-best", JSON.stringify(holeBests));
+      } catch (e) {}
+    }
+    const holeMeta = (i) =>
+      `Par ${hole.par} · ${hole.yards} yds` +
+      (holeBests[i] ? ` · Best ${holeBests[i]}` : "");
+
     // ---------- flow ----------
     function loadHole(i) {
       hole = buildHole(i);
@@ -1671,7 +1689,7 @@
       S.introT = 0;
       setText(ui.hNum, String(i + 1));
       setText(ui.hName, hole.name);
-      setText(ui.hMeta, `Par ${hole.par} · ${hole.yards} yds`);
+      setText(ui.hMeta, holeMeta(i));
       ui.windArrow.style.transform = `rotate(${hole.wind.a}rad)`;
       setText(ui.windTxt, hole.wind.mph + " mph");
       toast(
@@ -1871,6 +1889,13 @@
       ball.y = hole.pin.y;
       ball.z = 0;
       S.scores[S.hi] = S.strokes;
+      const prevBest = holeBests[S.hi];
+      const newBest = !prevBest || S.strokes < prevBest;
+      if (newBest) {
+        holeBests[S.hi] = S.strokes;
+        saveHoleBests();
+        setText(ui.hMeta, holeMeta(S.hi));
+      }
       const d = S.strokes - hole.par;
       const name =
         S.strokes === 1
@@ -1886,7 +1911,8 @@
             }[d] || `${d > 0 ? "+" : ""}${d}`;
       toast(
         name,
-        `${S.strokes} stroke${S.strokes > 1 ? "s" : ""} · round ${fmtDiff(totalDiff())}`,
+        `${S.strokes} stroke${S.strokes > 1 ? "s" : ""} · round ${fmtDiff(totalDiff())}` +
+          (newBest && prevBest ? " · New hole best!" : ""),
         2.6,
       );
       S.state = "holed";
@@ -1921,8 +1947,11 @@
       }
       let h1 = "<thead><tr><th>Hole</th>",
         r1 = "<tr><td>Par</td>",
-        r2 = "<tr><td>Score</td>";
-      let parT = 0;
+        r2 = "<tr><td>Score</td>",
+        r3 = "<tr><td>Best</td>";
+      let parT = 0,
+        bestT = 0,
+        bestAll = true;
       HOLES.forEach((hh, i) => {
         parT += hh.par;
         const cur = i === S.hi ? " cur" : "";
@@ -1944,11 +1973,16 @@
                     : "";
         }
         r2 += `<td class="${cls}${cur}"><span>${s != null ? s : ""}</span></td>`;
+        const hb = holeBests[i];
+        if (hb) bestT += hb;
+        else bestAll = false;
+        r3 += `<td class="${cur}">${hb || ""}</td>`;
       });
       h1 += '<th class="tot">Tot</th></tr></thead>';
       r1 += `<td class="tot">${parT}</td></tr>`;
       r2 += `<td class="tot">${tot || ""}</td></tr>`;
-      ui.scTable.innerHTML = h1 + "<tbody>" + r1 + r2 + "</tbody>";
+      r3 += `<td class="tot">${bestAll ? bestT : ""}</td></tr>`;
+      ui.scTable.innerHTML = h1 + "<tbody>" + r1 + r2 + r3 + "</tbody>";
       ui.btnNext.focus();
     }
     function nextFromCard() {
